@@ -1,0 +1,834 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LEEP XRF Data Processor</title>
+<style>
+  :root {
+    --bg: #F5F3EE;
+    --surface: #FFFFFF;
+    --border: #DDD9D0;
+    --text: #1A1916;
+    --muted: #7A7668;
+    --green: #1D6B4F;
+    --green-light: #E8F4EF;
+    --orange: #B85C2C;
+    --orange-light: #FBF0EA;
+    --yellow: #C4892A;
+    --yellow-light: #FDF6E8;
+    --red: #C0392B;
+    --red-light: #FDEDEC;
+    --lod: #888;
+    --mono: 'SF Mono', 'Menlo', 'Consolas', 'Liberation Mono', monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--sans);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 40px 24px;
+  }
+
+  .container { max-width: 1100px; margin: 0 auto; }
+
+  header {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 40px;
+  }
+
+  .logo {
+    width: 40px; height: 40px;
+    background: var(--green);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .logo svg { width: 22px; height: 22px; fill: white; }
+
+  h1 {
+    font-size: 22px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    line-height: 1.2;
+  }
+
+  .subtitle {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 3px;
+    font-weight: 400;
+  }
+
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    padding: 48px 32px;
+    text-align: center;
+    background: var(--surface);
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    margin-bottom: 32px;
+  }
+
+  .upload-zone:hover, .upload-zone.drag-over {
+    border-color: var(--green);
+    background: var(--green-light);
+  }
+
+  .upload-icon {
+    width: 48px; height: 48px;
+    background: var(--green-light);
+    border-radius: 12px;
+    display: flex; align-items: center; justify-content: center;
+    margin: 0 auto 16px;
+  }
+
+  .upload-icon svg { width: 24px; height: 24px; stroke: var(--green); fill: none; stroke-width: 1.5; }
+
+  .upload-zone h2 { font-size: 16px; font-weight: 500; margin-bottom: 6px; }
+  .upload-zone p { font-size: 13px; color: var(--muted); }
+  .upload-zone input[type=file] { display: none; }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 9px 18px;
+    border-radius: 7px;
+    font-family: var(--sans);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+
+  .btn:active { transform: scale(0.98); }
+  .btn:hover { opacity: 0.88; }
+  .btn-primary { background: var(--green); color: white; }
+  .btn-outline { background: white; color: var(--text); border: 1px solid var(--border); }
+  .btn-sm { padding: 6px 12px; font-size: 12px; }
+  .btn svg { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2; }
+
+  #results { display: none; }
+
+  .tabs {
+    display: flex;
+    gap: 2px;
+    background: var(--border);
+    border-radius: 9px;
+    padding: 3px;
+    width: fit-content;
+    margin-bottom: 20px;
+  }
+
+  .tab {
+    padding: 7px 16px;
+    border-radius: 7px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-family: var(--sans);
+    transition: all 0.15s;
+  }
+
+  .tab.active { background: white; color: var(--text); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .section-title {
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .badge {
+    font-size: 11px;
+    font-weight: 500;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-family: var(--mono);
+  }
+
+  .badge-green { background: var(--green-light); color: var(--green); }
+  .badge-yellow { background: var(--yellow-light); color: var(--yellow); }
+  .badge-orange { background: var(--orange-light); color: var(--orange); }
+  .badge-red { background: var(--red-light); color: var(--red); }
+  .badge-gray { background: #EEECEA; color: var(--muted); }
+
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow-x: auto;
+    margin-bottom: 24px;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+  thead th {
+    background: #F9F8F5;
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+
+  tbody tr { border-bottom: 1px solid #F0EDE8; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: #FAFAF8; }
+
+  td {
+    padding: 9px 14px;
+    font-family: var(--mono);
+    font-size: 12px;
+    vertical-align: middle;
+  }
+
+  td.label-col {
+    font-family: var(--sans);
+    font-weight: 500;
+    font-size: 13px;
+  }
+
+  td.lod { color: var(--lod); font-style: italic; }
+
+  .avg-row { background: #F5FAF7 !important; }
+  .avg-row td { font-weight: 600; }
+
+  .flag-no-lead { background: var(--green-light) !important; }
+  .flag-send-lab { background: var(--yellow-light) !important; }
+  .flag-has-lead { background: var(--red-light) !important; }
+
+  .summary-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .summary-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+  }
+
+  .summary-card .label { font-size: 11px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px; }
+  .summary-card .value { font-size: 22px; font-weight: 600; font-family: var(--mono); }
+  .summary-card .sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .export-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 18px;
+    margin-top: 24px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .export-bar span { font-size: 13px; color: var(--muted); }
+  .export-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+
+  tr.group-sep td { border-top: 2px solid var(--border); }
+
+  .pill {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: var(--sans);
+    letter-spacing: 0.3px;
+  }
+
+  .pill-green { background: var(--green-light); color: var(--green); }
+  .pill-yellow { background: var(--yellow-light); color: var(--yellow); }
+  .pill-red { background: var(--red-light); color: var(--red); }
+  .pill-gray { background: #EEECEA; color: var(--muted); }
+
+  .legend {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 20px;
+    display: flex;
+    gap: 24px;
+    flex-wrap: wrap;
+    font-size: 12px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .legend-dot {
+    width: 10px; height: 10px;
+    border-radius: 3px;
+    flex-shrink: 0;
+  }
+
+  .new-file-btn {
+    margin-top: 16px;
+  }
+
+  @media (max-width: 600px) {
+    body { padding: 20px 12px; }
+    .summary-grid { grid-template-columns: 1fr 1fr; }
+    .legend { flex-direction: column; gap: 8px; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="logo">
+      <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+    </div>
+    <div>
+      <h1>LEEP XRF Data Processor</h1>
+      <p class="subtitle">Upload a chemistry CSV from the Vanta XRF to generate a clean Pb analysis sheet</p>
+    </div>
+  </header>
+
+  <div class="upload-zone" id="uploadZone">
+    <input type="file" id="fileInput" accept=".csv">
+    <div class="upload-icon">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+    </div>
+    <h2>Drop your chemistry CSV here</h2>
+    <p>or click to browse &mdash; only the chemistry export from Vanta software is supported</p>
+    <br>
+    <button class="btn btn-primary" onclick="document.getElementById('fileInput').click()">
+      <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+      Choose file
+    </button>
+  </div>
+
+  <div id="results">
+
+    <div class="summary-grid" id="summaryGrid"></div>
+
+    <div class="legend">
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--green)"></div>
+        <span><strong>&lt; 20 ppm</strong> &mdash; Most likely no lead</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--yellow)"></div>
+        <span><strong>20 &ndash; 200 ppm</strong> &mdash; Send to accredited lab</span>
+      </div>
+      <div class="legend-item">
+        <div class="legend-dot" style="background:var(--red)"></div>
+        <span><strong>&gt; 200 ppm</strong> &mdash; Lead detected</span>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('samples')">Sample Readings</button>
+      <button class="tab" onclick="showTab('calibration')">Calibration</button>
+    </div>
+
+    <div class="tab-panel active" id="tab-samples">
+      <div class="section-header">
+        <div class="section-title">
+          Sample Pb Readings
+          <span class="badge badge-gray" id="sampleCount">&mdash;</span>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table id="sampleTable">
+          <thead>
+            <tr>
+              <th>Sample ID</th>
+              <th>Readings</th>
+              <th>Avg Pb (ppm)</th>
+              <th>Status</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody id="sampleBody"></tbody>
+        </table>
+      </div>
+
+      <div id="detailSection" style="display:none">
+        <div class="section-header">
+          <div class="section-title">
+            All Individual Readings
+            <span class="badge badge-gray" id="readingCount">&mdash;</span>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Sample ID</th>
+                <th>Reading #</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Pb (ppm)</th>
+                <th>Pb Error &plusmn;1s</th>
+              </tr>
+            </thead>
+            <tbody id="detailBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <button class="btn btn-outline btn-sm" id="toggleDetail" onclick="toggleDetailTable()">
+        Show individual readings
+      </button>
+    </div>
+
+    <div class="tab-panel" id="tab-calibration">
+      <div class="section-header">
+        <div class="section-title">Cal Checks, Blanks &amp; CRMs</div>
+      </div>
+      <div class="table-wrap">
+        <table id="calTable">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Reading #</th>
+              <th>Date</th>
+              <th>Time</th>
+              <th>Pb (ppm)</th>
+              <th>Pb Error &plusmn;1s</th>
+              <th>Method</th>
+            </tr>
+          </thead>
+          <tbody id="calBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="export-bar">
+      <span id="filenameLabel">&mdash;</span>
+      <div class="export-btns">
+        <button class="btn btn-outline btn-sm" onclick="downloadCSV('samples')">
+          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          Export summary CSV
+        </button>
+        <button class="btn btn-outline btn-sm" onclick="downloadCSV('detail')">
+          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          Export all readings CSV
+        </button>
+        <button class="btn btn-outline btn-sm" onclick="downloadCSV('calibration')">
+          <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          Export calibration CSV
+        </button>
+      </div>
+    </div>
+
+    <div style="text-align:center" class="new-file-btn">
+      <button class="btn btn-outline" onclick="resetUI()">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+        Process another file
+      </button>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+  let processedSamples = [];
+  let processedCal = [];
+  let originalFilename = '';
+  let detailVisible = false;
+
+  const zone = document.getElementById('uploadZone');
+  const fileInput = document.getElementById('fileInput');
+
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); zone.classList.remove('drag-over');
+    const f = e.dataTransfer.files[0];
+    if (f) processFile(f);
+  });
+  zone.addEventListener('click', e => {
+    if (e.target.tagName !== 'BUTTON') fileInput.click();
+  });
+  fileInput.addEventListener('change', e => { if (e.target.files[0]) processFile(e.target.files[0]); });
+
+  function parseCSV(text) {
+    const lines = text.replace(/\r/g, '').split('\n').filter(l => l.trim());
+    const headers = splitCSVLine(lines[0]);
+    return lines.slice(1).map(line => {
+      const vals = splitCSVLine(line);
+      const obj = {};
+      headers.forEach((h, i) => obj[h.trim()] = (vals[i] || '').trim());
+      return obj;
+    });
+  }
+
+  function splitCSVLine(line) {
+    const result = []; let cur = ''; let inQ = false;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (c === '"') { inQ = !inQ; }
+      else if (c === ',' && !inQ) { result.push(cur); cur = ''; }
+      else cur += c;
+    }
+    result.push(cur);
+    return result;
+  }
+
+  function classify(row) {
+    const method = (row['Method Name'] || '').trim();
+    const info = (row['info'] || '').toString().trim().toLowerCase();
+
+    if (method === 'Cal Check') return 'calcheck';
+    if (info === 'blank' || info.includes('blank')) return 'blank';
+    if (info.includes('sdar')) return 'crm';
+    if (method === 'Geochem(1)' || method === 'Geochem(2)') return 'sample';
+    return 'other';
+  }
+
+  function parsePb(val) {
+    if (!val || val === '' || val === 'nan') return { display: '—', raw: null, isLOD: false };
+    const s = val.toString().trim();
+    if (s.startsWith('<LOD') || s === '<LOD') return { display: '<LOD', raw: null, isLOD: true };
+    const n = parseFloat(s);
+    if (isNaN(n)) return { display: s, raw: null, isLOD: false };
+    return { display: n.toFixed(1), raw: n, isLOD: false };
+  }
+
+  function getStatus(avg) {
+    if (avg === null) return { label: '<LOD', cls: 'pill-gray', rowCls: '', category: 'lod' };
+    if (avg < 20) return { label: 'Most likely no lead', cls: 'pill-green', rowCls: 'flag-no-lead', category: 'no-lead' };
+    if (avg <= 200) return { label: 'Send to accredited lab', cls: 'pill-yellow', rowCls: 'flag-send-lab', category: 'send-lab' };
+    return { label: 'Lead detected', cls: 'pill-red', rowCls: 'flag-has-lead', category: 'has-lead' };
+  }
+
+  function processFile(file) {
+    originalFilename = file.name;
+    const reader = new FileReader();
+    reader.onload = e => {
+      const rows = parseCSV(e.target.result);
+      buildOutput(rows);
+    };
+    reader.readAsText(file);
+  }
+
+  function buildOutput(rows) {
+    processedSamples = [];
+    processedCal = [];
+
+    rows.forEach(row => {
+      const type = classify(row);
+      const pb = parsePb(row['Pb Concentration']);
+      const pbErr = (row['Pb Error1s'] || '').trim();
+      const date = (row['Date'] || '').trim();
+      const time = (row['Time'] || '').trim();
+      const readingNum = (row['Reading #'] || '').trim();
+      const info = (row['info'] || '').toString().trim();
+      const label = (row['Test Label'] || '').toString().trim();
+
+      if (type === 'sample') {
+        processedSamples.push({
+          id: info || label,
+          readingNum, date, time,
+          pb, pbErr
+        });
+      } else if (type === 'calcheck' || type === 'blank' || type === 'crm') {
+        processedCal.push({
+          type: type === 'calcheck' ? 'Cal Check' : type === 'blank' ? 'Blank' : 'CRM (SdAR-L2)',
+          readingNum, date, time,
+          pb, pbErr,
+          method: (row['Method Name'] || '').trim()
+        });
+      }
+    });
+
+    renderAll();
+
+    document.getElementById('results').style.display = 'block';
+    document.getElementById('filenameLabel').textContent = originalFilename;
+    document.getElementById('uploadZone').style.display = 'none';
+    detailVisible = false;
+    document.getElementById('detailSection').style.display = 'none';
+    document.getElementById('toggleDetail').textContent = 'Show individual readings';
+  }
+
+  function groupById(samples) {
+    const groups = {};
+    const order = [];
+    samples.forEach(s => {
+      if (!groups[s.id]) {
+        groups[s.id] = [];
+        order.push(s.id);
+      }
+      groups[s.id].push(s);
+    });
+    return { groups, order };
+  }
+
+  function computeGroupStats(readings) {
+    const nums = readings.map(r => r.pb.raw).filter(v => v !== null);
+    const lodCount = readings.filter(r => r.pb.isLOD).length;
+    const total = readings.length;
+
+    if (nums.length === 0) {
+      return { avg: null, allLOD: true, hasLOD: lodCount > 0, count: total, numericCount: 0 };
+    }
+
+    const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+    return { avg, allLOD: false, hasLOD: lodCount > 0, count: total, numericCount: nums.length };
+  }
+
+  function renderAll() {
+    renderSummary();
+    renderSamples();
+    renderDetail();
+    renderCalibration();
+  }
+
+  function renderSummary() {
+    const { groups, order } = groupById(processedSamples);
+    const sampleCount = order.length;
+    let noLeadCount = 0, sendLabCount = 0, hasLeadCount = 0, lodCount = 0;
+
+    order.forEach(id => {
+      const stats = computeGroupStats(groups[id]);
+      const status = getStatus(stats.avg);
+      if (status.category === 'no-lead') noLeadCount++;
+      else if (status.category === 'send-lab') sendLabCount++;
+      else if (status.category === 'has-lead') hasLeadCount++;
+      else lodCount++;
+    });
+
+    document.getElementById('sampleCount').textContent = sampleCount + ' samples';
+
+    const calCount = processedCal.length;
+    const crmRows = processedCal.filter(r => r.type.includes('CRM'));
+    const crmPass = crmRows.filter(r => r.pb.raw !== null && r.pb.raw >= 165 && r.pb.raw <= 201).length;
+
+    document.getElementById('summaryGrid').innerHTML = `
+      <div class="summary-card">
+        <div class="label">Total Samples</div>
+        <div class="value">${sampleCount}</div>
+        <div class="sub">${processedSamples.length} total readings</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">Most likely no lead</div>
+        <div class="value" style="color:var(--green)">${noLeadCount}</div>
+        <div class="sub">&lt; 20 ppm</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">Send to lab</div>
+        <div class="value" style="color:var(--yellow)">${sendLabCount}</div>
+        <div class="sub">20 &ndash; 200 ppm</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">Lead detected</div>
+        <div class="value" style="color:var(--red)">${hasLeadCount}</div>
+        <div class="sub">&gt; 200 ppm</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">Calibration rows</div>
+        <div class="value">${calCount}</div>
+        <div class="sub">Cal checks, blanks, CRMs</div>
+      </div>
+      <div class="summary-card">
+        <div class="label">CRM accuracy</div>
+        <div class="value" style="color:${crmPass === crmRows.length && crmRows.length > 0 ? 'var(--green)' : 'var(--red)'}">${crmPass}/${crmRows.length}</div>
+        <div class="sub">within &plusmn;10% of 183 ppm</div>
+      </div>
+    `;
+  }
+
+  function renderSamples() {
+    const tbody = document.getElementById('sampleBody');
+    tbody.innerHTML = '';
+    const { groups, order } = groupById(processedSamples);
+
+    order.forEach((id, gi) => {
+      const readings = groups[id];
+      const stats = computeGroupStats(readings);
+      const status = getStatus(stats.avg);
+
+      const tr = document.createElement('tr');
+      if (gi > 0) tr.classList.add('group-sep');
+      if (status.rowCls) tr.classList.add(status.rowCls);
+
+      const avgDisplay = stats.avg !== null ? stats.avg.toFixed(1) : '<LOD';
+      const readingDetails = readings.map(r => r.pb.isLOD ? '<LOD' : (r.pb.raw !== null ? r.pb.raw.toFixed(1) : '—')).join(', ');
+
+      let notes = [];
+      if (stats.count === 1) notes.push('Single reading (not replicated)');
+      if (stats.hasLOD && !stats.allLOD) notes.push('Contains <LOD readings (excluded from avg)');
+      if (stats.allLOD) notes.push('All readings below LOD');
+
+      tr.innerHTML = `
+        <td class="label-col">${esc(id)}</td>
+        <td><span title="${esc(readingDetails)}">${stats.count} reading${stats.count !== 1 ? 's' : ''}: ${esc(readingDetails)}</span></td>
+        <td style="font-weight:600">${esc(avgDisplay)}</td>
+        <td><span class="pill ${status.cls}">${esc(status.label)}</span></td>
+        <td style="font-family:var(--sans);font-size:11px;color:var(--muted)">${notes.join('; ')}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderDetail() {
+    const tbody = document.getElementById('detailBody');
+    tbody.innerHTML = '';
+    const { groups, order } = groupById(processedSamples);
+
+    document.getElementById('readingCount').textContent = processedSamples.length + ' readings';
+
+    order.forEach((id, gi) => {
+      const readings = groups[id];
+      readings.forEach((r, i) => {
+        const tr = document.createElement('tr');
+        if (gi > 0 && i === 0) tr.classList.add('group-sep');
+        tr.innerHTML = `
+          <td class="label-col">${i === 0 ? esc(id) : ''}</td>
+          <td>${esc(r.readingNum)}</td>
+          <td>${esc(r.date)}</td>
+          <td>${esc(r.time)}</td>
+          <td class="${r.pb.isLOD ? 'lod' : ''}">${esc(r.pb.display)}</td>
+          <td>${esc(r.pbErr)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    });
+  }
+
+  function renderCalibration() {
+    const tbody = document.getElementById('calBody');
+    tbody.innerHTML = '';
+
+    processedCal.forEach(r => {
+      const isCRM = r.type.includes('CRM');
+      const pass = isCRM && r.pb.raw !== null && r.pb.raw >= 165 && r.pb.raw <= 201;
+      const fail = isCRM && r.pb.raw !== null && (r.pb.raw < 165 || r.pb.raw > 201);
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="label-col">
+          <span class="badge ${r.type === 'Cal Check' ? 'badge-gray' : r.type === 'Blank' ? 'badge-green' : 'badge-yellow'}">${esc(r.type)}</span>
+        </td>
+        <td>${esc(r.readingNum)}</td>
+        <td>${esc(r.date)}</td>
+        <td>${esc(r.time)}</td>
+        <td class="${r.pb.isLOD ? 'lod' : ''}">${esc(r.pb.display)}</td>
+        <td>${esc(r.pbErr)}</td>
+        <td>${esc(r.method)}${pass ? ' <span class="badge badge-green">Pass</span>' : ''}${fail ? ' <span class="badge badge-red">Fail</span>' : ''}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function toggleDetailTable() {
+    detailVisible = !detailVisible;
+    document.getElementById('detailSection').style.display = detailVisible ? 'block' : 'none';
+    document.getElementById('toggleDetail').textContent = detailVisible ? 'Hide individual readings' : 'Show individual readings';
+  }
+
+  function showTab(name) {
+    document.querySelectorAll('.tab').forEach((t, i) => {
+      t.classList.toggle('active', ['samples','calibration'][i] === name);
+    });
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+  }
+
+  function downloadCSV(type) {
+    let rows, headers, filename;
+
+    if (type === 'samples') {
+      const { groups, order } = groupById(processedSamples);
+      headers = ['Sample ID', 'Num Readings', 'Avg Pb (ppm)', 'Status', 'Notes'];
+      rows = [];
+      order.forEach(id => {
+        const readings = groups[id];
+        const stats = computeGroupStats(readings);
+        const status = getStatus(stats.avg);
+        const avgDisplay = stats.avg !== null ? stats.avg.toFixed(1) : '<LOD';
+
+        let notes = [];
+        if (stats.count === 1) notes.push('Single reading');
+        if (stats.hasLOD && !stats.allLOD) notes.push('<LOD excluded from avg');
+        if (stats.allLOD) notes.push('All <LOD');
+
+        rows.push([id, stats.count, avgDisplay, status.label, notes.join('; ')]);
+      });
+      filename = 'LEEP_XRF_Summary_' + today() + '.csv';
+    } else if (type === 'detail') {
+      const { groups, order } = groupById(processedSamples);
+      headers = ['Sample ID', 'Reading #', 'Date', 'Time', 'Pb (ppm)', 'Pb Error 1s'];
+      rows = [];
+      order.forEach(id => {
+        groups[id].forEach(r => {
+          rows.push([id, r.readingNum, r.date, r.time, r.pb.display, r.pbErr]);
+        });
+      });
+      filename = 'LEEP_XRF_AllReadings_' + today() + '.csv';
+    } else {
+      headers = ['Type', 'Reading #', 'Date', 'Time', 'Pb (ppm)', 'Pb Error 1s', 'Method'];
+      rows = processedCal.map(r => [r.type, r.readingNum, r.date, r.time, r.pb.display, r.pbErr, r.method]);
+      filename = 'LEEP_XRF_Calibration_' + today() + '.csv';
+    }
+
+    const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(',')).join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+  }
+
+  function resetUI() {
+    document.getElementById('results').style.display = 'none';
+    document.getElementById('uploadZone').style.display = '';
+    fileInput.value = '';
+    processedSamples = [];
+    processedCal = [];
+  }
+
+  function today() {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  function esc(s) {
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+</script>
+</body>
+</html>
