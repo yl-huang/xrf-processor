@@ -612,13 +612,69 @@
     return result;
   }
 
+  const CRM_REFS = {
+    'amis0857': {
+      pbNote: 'Pb unreliable — Cu interference (~9,500 ppm Cu, Kβ overlaps Pb Lα)',
+      elements: {
+        'Fe': { certified: 30000, unit: 'ppm', label: 'Fe (~3%)' },
+        'Mn': { certified: 1480, unit: 'ppm', label: 'Mn' },
+        'Cu': { certified: 9500, unit: 'ppm', label: 'Cu' },
+        'Zn': { certified: 65, unit: 'ppm', label: 'Zn' },
+        'Ti': { certified: 2600, unit: 'ppm', label: 'Ti' },
+        'Sr': { certified: 142, unit: 'ppm', label: 'Sr' },
+        'Zr': { certified: 78, unit: 'ppm', label: 'Zr' }
+      }
+    },
+    'sdar': {
+      elements: {
+        'Pb': { certified: 183, unit: 'ppm', label: 'Pb' }
+      }
+    }
+  };
+
+  function getCRMRef(info) {
+    const lower = info.toLowerCase();
+    for (const [key, ref] of Object.entries(CRM_REFS)) {
+      if (lower.includes(key)) return ref;
+    }
+    return null;
+  }
+
+  function parseElement(val) {
+    if (!val || val === '' || val === 'nan') return null;
+    const s = val.toString().trim();
+    if (s.startsWith('<LOD') || s === '<LOD') return null;
+    const n = parseFloat(s);
+    return isNaN(n) ? null : n;
+  }
+
+  function checkCRMElements(row, ref) {
+    if (!ref || !ref.elements) return [];
+    const results = [];
+    for (const [el, spec] of Object.entries(ref.elements)) {
+      const raw = parseElement(row[el + ' Concentration']);
+      const low = spec.certified * 0.9;
+      const high = spec.certified * 1.1;
+      const pass = raw !== null && raw >= low && raw <= high;
+      const warn = raw !== null && !pass;
+      results.push({
+        element: spec.label,
+        certified: spec.certified,
+        measured: raw,
+        pass, warn,
+        low, high
+      });
+    }
+    return results;
+  }
+
   function classify(row) {
     const method = (row['Method Name'] || '').trim();
     const info = (row['info'] || '').toString().trim().toLowerCase();
 
     if (method === 'Cal Check') return 'calcheck';
     if (info === 'blank' || info.includes('blank')) return 'blank';
-    if (info.includes('sdar')) return 'crm';
+    if (info.includes('sdar') || info.includes('crm') || info.includes('amis')) return 'crm';
     if (method === 'Geochem(1)' || method === 'Geochem(2)') return 'sample';
     return 'other';
   }
@@ -672,11 +728,14 @@
           pb, pbErr
         });
       } else if (type === 'calcheck' || type === 'blank' || type === 'crm') {
+        const crmRef = type === 'crm' ? getCRMRef(info) : null;
         processedCal.push({
-          type: type === 'calcheck' ? 'Cal Check' : type === 'blank' ? 'Blank' : 'CRM (SdAR-L2)',
+          type: type === 'calcheck' ? 'Cal Check' : type === 'blank' ? 'Blank' : 'CRM (' + info + ')',
           readingNum, date, time,
           pb, pbErr,
-          method: (row['Method Name'] || '').trim()
+          method: (row['Method Name'] || '').trim(),
+          pbNote: crmRef ? crmRef.pbNote || null : null,
+          elementChecks: crmRef ? checkCRMElements(row, crmRef) : []
         });
       }
     });
@@ -766,7 +825,16 @@
 
     const calCount = processedCal.length;
     const crmRows = processedCal.filter(r => r.type.includes('CRM'));
-    const crmPass = crmRows.filter(r => r.pb.raw !== null && r.pb.raw >= 165 && r.pb.raw <= 201).length;
+    const sdarRows = crmRows.filter(r => r.type.toLowerCase().includes('sdar'));
+    const sdarPass = sdarRows.filter(r => r.pb.raw !== null && r.pb.raw >= 165 && r.pb.raw <= 201).length;
+
+    const amisRows = crmRows.filter(r => r.type.toLowerCase().includes('amis'));
+    let amisTotal = 0, amisPass = 0, amisWarn = 0;
+    amisRows.forEach(r => {
+      (r.elementChecks || []).forEach(c => {
+        if (c.measured !== null) { amisTotal++; if (c.pass) amisPass++; else amisWarn++; }
+      });
+    });
 
     document.getElementById('summaryGrid').innerHTML = `
       <div class="summary-card">
@@ -795,10 +863,15 @@
         <div class="sub">Cal checks, blanks, CRMs</div>
       </div>
       <div class="summary-card">
-        <div class="label">CRM accuracy</div>
-        <div class="value" style="color:${crmPass === crmRows.length && crmRows.length > 0 ? 'var(--green)' : 'var(--red)'}">${crmPass}/${crmRows.length}</div>
-        <div class="sub">within &plusmn;10% of 183 ppm</div>
+        <div class="label">SdAR-L2 accuracy</div>
+        <div class="value" style="color:${sdarPass === sdarRows.length && sdarRows.length > 0 ? 'var(--green)' : sdarRows.length === 0 ? 'var(--muted)' : 'var(--red)'}">${sdarRows.length > 0 ? sdarPass + '/' + sdarRows.length : 'N/A'}</div>
+        <div class="sub">${sdarRows.length > 0 ? 'within &plusmn;10% of 183 ppm Pb' : 'No SdAR readings found'}</div>
       </div>
+      ${amisRows.length > 0 ? `<div class="summary-card">
+        <div class="label">AMIS0857 elements</div>
+        <div class="value" style="color:${amisWarn > 0 ? 'var(--yellow)' : amisTotal > 0 ? 'var(--green)' : 'var(--muted)'}">${amisTotal > 0 ? amisPass + '/' + amisTotal : 'N/A'}</div>
+        <div class="sub">${amisWarn > 0 ? amisWarn + ' outside &plusmn;10% range' : amisTotal > 0 ? 'all within &plusmn;10%' : 'no element data'}</div>
+      </div>` : ''}
     `;
   }
 
@@ -870,9 +943,22 @@
     tbody.innerHTML = '';
 
     processedCal.forEach(r => {
-      const isCRM = r.type.includes('CRM');
-      const pass = isCRM && r.pb.raw !== null && r.pb.raw >= 165 && r.pb.raw <= 201;
-      const fail = isCRM && r.pb.raw !== null && (r.pb.raw < 165 || r.pb.raw > 201);
+      const isSdAR = r.type.toLowerCase().includes('sdar');
+      const pass = isSdAR && r.pb.raw !== null && r.pb.raw >= 165 && r.pb.raw <= 201;
+      const fail = isSdAR && r.pb.raw !== null && (r.pb.raw < 165 || r.pb.raw > 201);
+
+      let pbNote = r.pbNote ? ` <span style="color:var(--muted);font-size:0.82em;font-style:italic">${esc(r.pbNote)}</span>` : '';
+
+      let elChecksHtml = '';
+      if (r.elementChecks && r.elementChecks.length > 0) {
+        const chips = r.elementChecks.map(c => {
+          if (c.measured === null) return `<span class="badge badge-gray">${esc(c.element)}: N/A</span>`;
+          const badge = c.pass ? 'badge-green' : 'badge-yellow';
+          const val = c.measured >= 1000 ? Math.round(c.measured).toLocaleString() : c.measured.toFixed(1);
+          return `<span class="badge ${badge}">${esc(c.element)}: ${val} ppm</span>`;
+        }).join(' ');
+        elChecksHtml = `<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">${chips}</div>`;
+      }
 
       const tr = document.createElement('tr');
       tr.innerHTML = `
@@ -882,9 +968,9 @@
         <td>${esc(r.readingNum)}</td>
         <td>${esc(r.date)}</td>
         <td>${esc(r.time)}</td>
-        <td class="${r.pb.isLOD ? 'lod' : ''}">${esc(r.pb.display)}</td>
+        <td class="${r.pb.isLOD ? 'lod' : ''}">${esc(r.pb.display)}${pbNote}</td>
         <td>${esc(r.pbErr)}</td>
-        <td>${esc(r.method)}${pass ? ' <span class="badge badge-green">Pass</span>' : ''}${fail ? ' <span class="badge badge-red">Fail</span>' : ''}</td>
+        <td>${esc(r.method)}${pass ? ' <span class="badge badge-green">Pass</span>' : ''}${fail ? ' <span class="badge badge-red">Fail</span>' : ''}${elChecksHtml}</td>
       `;
       tbody.appendChild(tr);
     });
